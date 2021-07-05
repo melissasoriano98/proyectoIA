@@ -51,8 +51,6 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
 
         const entitiesNum = entities.length
 
-        console.log(entities)
-
         function convertToTensors(data, targets, dataSplit){
             const numExamples = data.length
             if(numExamples !== data.length) throw new Error('Data and split have different numbers of examples')
@@ -71,13 +69,12 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
                 shuffledTargets.push(targets[indices[i]]);
             }
 
-            console.log(shuffledData)
-
             const numTest = Math.round(numExamples * dataSplit)
             const numTrain = numExamples - numTest
             const xDims = shuffledData[0].length
+            const xs = tf.tensor2d(shuffledData, [numExamples, xDims], 'int32')
 
-            const xs = tf.tensor2d(shuffledData, [numExamples, xDims])
+            for(let item of shuffledTargets){ shuffledTargets[shuffledTargets.indexOf(item)] = parseInt(item)}
             const ys = tf.oneHot(tf.tensor1d(shuffledTargets).toInt(), entitiesNum)
 
             const xTrain = xs.slice([0,0], [numTrain, xDims])
@@ -92,15 +89,15 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
             return tf.tidy(()=> {
                 const dataByEntitie = []
                 const targetsByEntitie = []
-                for(let i = 0; i < 10; i++){
+                for(let i = 0; i < entitiesNum; i++){
                     dataByEntitie.push([])
                     targetsByEntitie.push([])
                 }
                 for(const item of compound){
                     const target = item[item.length -1]
                     const data = item.slice(0, item.length -1)
-                    dataByEntitie[target].push(data)
-                    targetsByEntitie[target].push(target)
+                    dataByEntitie[entities.indexOf(target)].push(data)
+                    targetsByEntitie[entities.indexOf(target)].push(target)
                 }
 
                 const xTrains = []
@@ -108,7 +105,7 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
                 const xTests = []
                 const yTests = []
 
-                for(let i = 0; i < 10; i++){
+                for(let i = 0; i < entitiesNum; i++){
                     const [xTrain, yTrain, xTest, yTest] = convertToTensors(dataByEntitie[i], targetsByEntitie[i], dataSplit)
                     xTrains.push(xTrain)
                     yTrains.push(yTrain)
@@ -119,18 +116,68 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
                 const concatAxis = 0
                 const test1 = xTrains
                 const test2 = tf.concat(xTrains, concatAxis)
-                console.log(test1)
-                console.log(test2)
+                //console.log(test1)
+                //console.log(test2)
                 return [
-                    tf.concat(xTrains, concatAxis),
+                    tf.concat(xTrains, concatAxis), 
                     tf.concat(yTrains, concatAxis),
                     tf.concat(xTests, concatAxis),
                     tf.concat(yTests, concatAxis)
                 ]
             }) 
         }
-        getFeatureData(.2)
-        return res.status(200).json({compound})
+        //getFeatureData(.2)
+
+
+        async function trainModel(xTrain, yTrain, xTest, yTest){
+            const model = tf.sequential()
+            const learningRate = req.body.learningRate
+            const numberOfEpochs = req.body.numberOfEpochs
+            const optimizer = tf.train.adam(learningRate)
+
+            console.log(xTrain.shape[1])
+
+            model.add(tf.layers.dense(
+                { units:10, activation: 'sigmoid', inputShape: [xTrain.shape[1]]}
+            ))
+            model.add(tf.layers.dense(
+                { units:2, activation: 'softmax'}
+            ))
+            model.compile(
+                { optimizer: optimizer, loss: 'categoricalCrossentropy', metrics: ['accuracy']}
+            )
+
+            console.log(xTrain)
+            const history = await model.fit(xTrain, yTrain, 
+                { epochs: numberOfEpochs, validationData: [xTest, yTest],
+                    callbacks: {
+                        onEpochEnd: async (epoch, logs) => {
+                            console.log(`Epoch: ${epoch} Logs: ${logs.loss}`)
+                            await tf.nextFrame()
+                        }
+                    }
+                }
+            )
+            return model
+        }
+        async function doFeature(){
+            const [xTrain, yTrain, xTest, yTest] = getFeatureData(.2)
+            model = await trainModel(xTrain, yTrain, xTest, yTest)
+
+            const input = tf.tensor2d([5,1,1,1,2,1,3,1,1], [1, 9])
+            const prediction = model.predict(input)
+            console.log(prediction)
+
+            const predictionWithArgMax = model.predict(input).argMax(-1).dataSync()
+            console.log(predictionWithArgMax)
+
+            let data = entities[predictionWithArgMax]
+
+            return data
+        }
+
+        let result = await doFeature()
+        return res.status(200).json({result})
     }catch(error){
         console.log(error)
         next(error)
