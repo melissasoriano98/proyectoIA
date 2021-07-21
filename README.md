@@ -38,4 +38,4 @@ Se agregan los csv en el BODY como form-data, con el nombre features para el csv
 Y posteriormente también el rango de aprendizaje con el nombre de learningRate y el número de épocas con el nombre numberOfEpochs
 
 Todo como se muestra en la siguiente imágen
-![image](https://user-images.githubusercontent.com/34258748/126431988-8e847838-ae31-4a67-9bcf-c70de020f740.png)
+![image](https://user-images.githubusercontent.com/34258748/126434657-6b9a4d82-5438-4cc8-90a5-314b4364f56c.png)
