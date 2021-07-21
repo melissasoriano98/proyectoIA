@@ -135,7 +135,7 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
             const numberOfEpochs = req.body.numberOfEpochs
             const optimizer = tf.train.adam(learningRate)
 
-            console.log(xTrain.shape[1])
+            //console.log(xTrain.shape[1])
 
             model.add(tf.layers.dense(
                 { units:10, activation: 'sigmoid', inputShape: [xTrain.shape[1]]}
@@ -147,7 +147,7 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
                 { optimizer: optimizer, loss: 'categoricalCrossentropy', metrics: ['accuracy']}
             )
 
-            console.log(xTrain)
+            //console.log(xTrain)
             const history = await model.fit(xTrain, yTrain, 
                 { epochs: numberOfEpochs, validationData: [xTest, yTest],
                     callbacks: {
@@ -171,9 +171,33 @@ route.post('/', upload.fields([{name: 'features'},{name: 'results'}]),  async(re
             const predictionWithArgMax = model.predict(input).argMax(-1).dataSync()
             console.log(predictionWithArgMax)
 
+            const xData = xTest.dataSync()
+            const yTrue = yTest.argMax(-1).dataSync()
+
+            const predictions = await model.predict(xTest)
+            const yPred = predictions.argMax(-1).dataSync()
+            
+            let correct = 0
+            let wrong = 0
+            for (let i = 0; i < yTrue.length; i++) {
+                //console.log(`True: ${yTrue[i]}, Pred: ${yPred[i]}`)
+                if(yTrue[i] == yPred[i]){
+                    correct++
+                }else{
+                    wrong++
+                }   
+            }
+            console.log(`Prediction error rate: ${wrong/yTrue.length}`)
+            let Prediction_Error_Rate = wrong/yTrue.length
+
             let data = entities[predictionWithArgMax]
 
-            return data
+            return {
+                Corrects: correct,
+                Wrongs: wrong,
+                Prediction_Error_Rate: Prediction_Error_Rate,
+                Result: data
+            }
         }
 
         let result = await doFeature()
